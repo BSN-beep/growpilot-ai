@@ -1,8 +1,12 @@
-// PUBLIC browser configuration only. Never put an AI secret here.
-// Supabase anon key is designed to be public, but protect data with Row Level Security.
-// Replace these placeholders before enabling auth.
+// GrowPilot AI v0.3
+// Public browser configuration only.
+// NEVER put private API keys or AI secrets in this file.
+
 window.GROWPILOT_CONFIG = {
   API_BASE_URL: "https://growpilot-ai.b83682675.workers.dev",
-  SUPABASE_URL: "https://YOUR-PROJECT.supabase.co",
-  SUPABASE_ANON_KEY: "YOUR_SUPABASE_ANON_KEY"
+
+  // Supabase is not enabled yet.
+  // These remain placeholders until authentication is configured.
+  SUPABASE_URL: "",
+  SUPABASE_ANON_KEY: ""
 };
