@@ -1,12 +1,5 @@
-// GrowPilot AI — V0.3
-// Cloudflare Worker + Workers AI + Static Frontend
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Content-Type": "application/json"
-};
+// GrowPilot AI v0.3
+// Cloudflare Worker + Workers AI
 
 const REQUIRED_FIELDS = [
   "business",
@@ -17,25 +10,21 @@ const REQUIRED_FIELDS = [
   "tone"
 ];
 
+const MAX_FIELD_LENGTH = 2000;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // ------------------------------------------
-    // CORS PREFLIGHT
-    // ------------------------------------------
-
+    // CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: CORS_HEADERS
+        headers: corsHeaders()
       });
     }
 
-    // ------------------------------------------
-    // API
-    // ------------------------------------------
-
+    // AI generation endpoint
     if (
       url.pathname === "/api/generate" &&
       request.method === "POST"
@@ -43,37 +32,28 @@ export default {
       return handleGenerate(request, env);
     }
 
-    // ------------------------------------------
-    // HOMEPAGE
-    // ------------------------------------------
-
+    // Homepage
     if (
       url.pathname === "/" &&
       request.method === "GET"
     ) {
+      const assetURL = new URL(request.url);
+      assetURL.pathname = "/HTML/index.html";
+
       return env.ASSETS.fetch(
-        new Request(
-          new URL("/HTML/index.html", request.url),
-          request
-        )
+        new Request(assetURL, request)
       );
     }
 
-    // ------------------------------------------
-    // STATIC FRONTEND
-    // ------------------------------------------
-
+    // Let Cloudflare Assets serve all frontend files.
     if (request.method === "GET") {
       return env.ASSETS.fetch(request);
     }
 
-    // ------------------------------------------
-    // METHOD NOT ALLOWED
-    // ------------------------------------------
-
     return json(
       {
-        error: "Method not allowed"
+        success: false,
+        error: "Method not allowed."
       },
       405
     );
@@ -81,128 +61,97 @@ export default {
 };
 
 
-// ==========================================
-// AI GENERATION
-// ==========================================
-
 async function handleGenerate(request, env) {
-  try {
-    let data;
+  let input;
 
-    try {
-      data = await request.json();
-    } catch {
+  // Read JSON request
+  try {
+    input = await request.json();
+  } catch {
+    return json(
+      {
+        success: false,
+        error: "Request body must contain valid JSON."
+      },
+      400
+    );
+  }
+
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input)
+  ) {
+    return json(
+      {
+        success: false,
+        error: "Invalid request data."
+      },
+      400
+    );
+  }
+
+
+  // Validate required fields
+  for (const field of REQUIRED_FIELDS) {
+    if (
+      typeof input[field] !== "string" ||
+      !input[field].trim()
+    ) {
       return json(
         {
-          error: "Invalid JSON request body"
+          success: false,
+          error: `Missing required field: ${field}`
         },
         400
       );
     }
+  }
 
-    // ----------------------------------------
-    // Validate required fields
-    // ----------------------------------------
 
-    for (const field of REQUIRED_FIELDS) {
-      if (
-        !data[field] ||
-        typeof data[field] !== "string" ||
-        !data[field].trim()
-      ) {
-        return json(
-          {
-            error: `Missing or invalid field: ${field}`
-          },
-          400
-        );
-      }
-    }
+  // Clean and limit input
+  const data = {
+    business: clean(input.business),
+    product: clean(input.product),
+    audience: clean(input.audience),
+    location: clean(input.location),
+    price: clean(input.price),
+    platform: clean(input.platform),
+    goal: clean(input.goal),
+    tone: clean(input.tone)
+  };
 
-    // ----------------------------------------
-    // Normalize values
-    // ----------------------------------------
 
-    const business = clean(data.business);
-    const product = clean(data.product);
-    const audience = clean(data.audience);
-    const platform = clean(data.platform);
-    const goal = clean(data.goal);
-    const tone = clean(data.tone);
+  const prompt = `
+Create a complete marketing pack for the following business.
 
-    const location = clean(
-      data.location || "Nigeria"
-    );
+Business:
+${data.business}
 
-    const price = clean(
-      data.price || "Not provided"
-    );
+Product or Service:
+${data.product}
 
-    // ----------------------------------------
-    // Protect the AI prompt from excessive input
-    // ----------------------------------------
+Target Audience:
+${data.audience}
 
-    const fields = {
-      business,
-      product,
-      audience,
-      platform,
-      goal,
-      tone,
-      location,
-      price
-    };
+Location:
+${data.location || "Not specified"}
 
-    for (const [key, value] of Object.entries(fields)) {
-      if (value.length > 2000) {
-        return json(
-          {
-            error: `${key} is too long. Please keep it under 2000 characters.`
-          },
-          400
-        );
-      }
-    }
+Price:
+${data.price || "Not specified"}
 
-    // ----------------------------------------
-    // GrowPilot AI prompt
-    // ----------------------------------------
+Main Platform:
+${data.platform}
 
-    const prompt = `
-You are GrowPilot AI, an expert marketing assistant
-for small businesses, especially businesses operating
-in Nigeria.
+Marketing Goal:
+${data.goal}
 
-Create a practical marketing pack using ONLY the
-information supplied by the user.
-
-BUSINESS:
-${business}
-
-PRODUCT OR SERVICE:
-${product}
-
-TARGET CUSTOMER:
-${audience}
-
-LOCATION:
-${location}
-
-PRICE:
-${price}
-
-PLATFORM:
-${platform}
-
-MARKETING GOAL:
-${goal}
-
-TONE:
-${tone}
+Marketing Tone:
+${data.tone}
 
 Return ONLY valid JSON.
 
-Use exactly this structure:
+The JSON must contain exactly these fields:
 
 {
   "headline": "string",
@@ -212,173 +161,116 @@ Use exactly this structure:
   "whatsapp_status": "string",
   "tiktok_hook": "string",
   "product_description": "string",
-  "content_ideas": [
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string"
-  ],
-  "hashtags": [
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string"
-  ]
+  "content_ideas": ["string", "string", "string", "string", "string"],
+  "hashtags": ["string", "string", "string", "string", "string", "string"]
 }
 
 Rules:
 
-1. Make the marketing content useful and specific.
-2. Keep claims realistic.
-3. Do not invent testimonials.
-4. Do not invent certifications.
-5. Do not invent guarantees.
-6. Do not invent discounts.
-7. Do not invent statistics.
-8. Do not invent business achievements.
-9. Do not invent facts that were not provided.
-10. Do not claim that a product is the cheapest,
-    best, number one, or guaranteed to work unless
-    the user explicitly provided that information.
-11. Make the content suitable for the selected platform.
-12. Make the content practical for a Nigerian audience
-    when appropriate.
-13. Return JSON only.
+- Make the content persuasive but natural.
+- Make the headline attention-grabbing.
+- Make the primary ad ready to publish.
+- Make the CTA action-oriented.
+- Make the WhatsApp message conversational.
+- Make the WhatsApp status short and engaging.
+- Make the TikTok hook suitable for the first few seconds of a video.
+- Make the product description useful for customers.
+- Provide exactly 5 content ideas.
+- Provide exactly 6 relevant hashtags.
+- Do not use markdown.
+- Do not wrap the JSON in code fences.
+- Do not add explanations outside the JSON.
 `;
 
-    // ----------------------------------------
-    // Run Workers AI
-    // ----------------------------------------
 
+  try {
     const model =
       env.AI_MODEL ||
       "@cf/zai-org/glm-4.7-flash";
 
-    const result = await env.AI.run(
+
+    const response = await env.AI.run(
       model,
       {
         messages: [
           {
             role: "system",
             content:
-              "You are GrowPilot AI. Return valid JSON only."
+              "You are GrowPilot AI, an expert marketing assistant. Return only valid JSON when JSON is requested."
           },
           {
             role: "user",
             content: prompt
           }
-        ],
-        temperature: 0.7
+        ]
       }
     );
 
-    let text = result?.response;
 
-    if (!text) {
-      return json(
-        {
-          error: "AI returned an empty response."
-        },
-        502
-      );
-    }
+    let raw = extractAIText(response);
 
-    // ----------------------------------------
-    // Remove Markdown JSON fences if AI adds them
-    // ----------------------------------------
-
-    text = text
+    // Remove accidental markdown code fences.
+    raw = raw
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
 
-    // ----------------------------------------
-    // Parse JSON
-    // ----------------------------------------
 
-    let output;
+    let result;
 
     try {
-      output = JSON.parse(text);
+      result = JSON.parse(raw);
     } catch {
       return json(
         {
-          error: "AI returned invalid JSON.",
-          raw: text.slice(0, 2000)
+          success: false,
+          error: "The AI returned invalid JSON.",
+          details: raw.slice(0, 1000)
         },
         502
       );
     }
 
-    // ----------------------------------------
-    // Validate AI output
-    // ----------------------------------------
 
-    const expectedKeys = [
-      "headline",
-      "primary_ad",
-      "cta",
-      "whatsapp_message",
-      "whatsapp_status",
-      "tiktok_hook",
-      "product_description",
-      "content_ideas",
-      "hashtags"
-    ];
+    // Normalize the AI response.
+    const normalized = {
+      headline: clean(result.headline),
+      primary_ad: clean(result.primary_ad),
+      cta: clean(result.cta),
+      whatsapp_message: clean(result.whatsapp_message),
+      whatsapp_status: clean(result.whatsapp_status),
+      tiktok_hook: clean(result.tiktok_hook),
+      product_description: clean(result.product_description),
 
-    for (const key of expectedKeys) {
-      if (!(key in output)) {
-        return json(
-          {
-            error: `AI response is missing: ${key}`
-          },
-          502
-        );
-      }
-    }
+      content_ideas: Array.isArray(result.content_ideas)
+        ? result.content_ideas
+            .map(clean)
+            .filter(Boolean)
+            .slice(0, 5)
+        : [],
 
-    if (!Array.isArray(output.content_ideas)) {
-      output.content_ideas = [];
-    }
+      hashtags: Array.isArray(result.hashtags)
+        ? result.hashtags
+            .map(clean)
+            .filter(Boolean)
+            .slice(0, 6)
+        : []
+    };
 
-    if (!Array.isArray(output.hashtags)) {
-      output.hashtags = [];
-    }
 
-    // ----------------------------------------
-    // Return successful response
-    // ----------------------------------------
-
-    return json(
-      {
-        success: true,
-        data: output
-      },
-      200
-    );
+    return json({
+      success: true,
+      data: normalized
+    });
 
   } catch (error) {
-    console.error(
-      "GrowPilot AI error:",
-      error
-    );
+    console.error("GrowPilot AI error:", error);
 
     return json(
       {
-        error:
-          error?.message ||
-          "Unexpected server error."
+        success: false,
+        error: "AI generation failed. Please try again."
       },
       500
     );
@@ -386,23 +278,79 @@ Rules:
 }
 
 
-// ==========================================
-// HELPERS
-// ==========================================
+/*
+ * Extract text from different Workers AI response shapes.
+ */
+function extractAIText(response) {
+  if (typeof response === "string") {
+    return response;
+  }
 
-function clean(value) {
-  return String(value)
-    .trim()
-    .replace(/\u0000/g, "");
+  if (!response) {
+    return "";
+  }
+
+  if (typeof response.response === "string") {
+    return response.response;
+  }
+
+  if (typeof response.result === "string") {
+    return response.result;
+  }
+
+  if (
+    response.result &&
+    typeof response.result.response === "string"
+  ) {
+    return response.result.response;
+  }
+
+  if (typeof response.text === "string") {
+    return response.text;
+  }
+
+  return JSON.stringify(response);
 }
 
 
+/*
+ * Clean user/AI text.
+ */
+function clean(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value)
+    .trim()
+    .slice(0, MAX_FIELD_LENGTH);
+}
+
+
+/*
+ * JSON response helper.
+ */
 function json(data, status = 200) {
   return new Response(
     JSON.stringify(data),
     {
       status,
-      headers: CORS_HEADERS
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        ...corsHeaders()
+      }
     }
   );
+}
+
+
+/*
+ * CORS headers.
+ */
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
 }
