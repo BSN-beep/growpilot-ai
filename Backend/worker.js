@@ -1,5 +1,13 @@
-// GrowPilot AI v0.3
+// GrowPilot AI v0.3.1
 // Cloudflare Worker + Workers AI
+//
+// IMPORTANT:
+// This version explicitly handles frontend routes so Cloudflare
+// does not redirect /HTML/index.html to /HTML/.
+
+// ============================================================
+// CONFIG
+// ============================================================
 
 const REQUIRED_FIELDS = [
   "business",
@@ -12,11 +20,19 @@ const REQUIRED_FIELDS = [
 
 const MAX_FIELD_LENGTH = 2000;
 
+
+// ============================================================
+// WORKER
+// ============================================================
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // --------------------------------------------------------
     // CORS preflight
+    // --------------------------------------------------------
+
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -24,7 +40,11 @@ export default {
       });
     }
 
-    // AI generation endpoint
+
+    // --------------------------------------------------------
+    // AI API
+    // --------------------------------------------------------
+
     if (
       url.pathname === "/api/generate" &&
       request.method === "POST"
@@ -32,23 +52,19 @@ export default {
       return handleGenerate(request, env);
     }
 
-    // Homepage
-    if (
-      url.pathname === "/" &&
-      request.method === "GET"
-    ) {
-      const assetURL = new URL(request.url);
-      assetURL.pathname = "/HTML/index.html";
 
-      return env.ASSETS.fetch(
-        new Request(assetURL, request)
-      );
-    }
+    // --------------------------------------------------------
+    // FRONTEND
+    // --------------------------------------------------------
 
-    // Let Cloudflare Assets serve all frontend files.
     if (request.method === "GET") {
-      return env.ASSETS.fetch(request);
+      return handleFrontend(request, env);
     }
+
+
+    // --------------------------------------------------------
+    // Unsupported method
+    // --------------------------------------------------------
 
     return json(
       {
@@ -61,10 +77,179 @@ export default {
 };
 
 
+// ============================================================
+// FRONTEND ROUTING
+// ============================================================
+
+async function handleFrontend(request, env) {
+  const url = new URL(request.url);
+
+  let pathname = url.pathname;
+
+
+  // ----------------------------------------------------------
+  // Root
+  // ----------------------------------------------------------
+
+  if (pathname === "/") {
+    pathname = "/HTML/index.html";
+  }
+
+
+  // ----------------------------------------------------------
+  // Prevent directory-style redirect
+  //
+  // /HTML/ should always become the actual index file.
+  // ----------------------------------------------------------
+
+  if (pathname === "/HTML/" || pathname === "/HTML") {
+    pathname = "/HTML/index.html";
+  }
+
+
+  // ----------------------------------------------------------
+  // Prevent CSS case mistakes
+  // ----------------------------------------------------------
+
+  if (pathname.startsWith("/css/")) {
+    pathname =
+      "/CSS/" + pathname.slice("/css/".length);
+  }
+
+
+  // ----------------------------------------------------------
+  // Prevent JavaScript case mistakes
+  // ----------------------------------------------------------
+
+  if (pathname.startsWith("/js/")) {
+    pathname =
+      "/Js/" + pathname.slice("/js/".length);
+  }
+
+
+  // ----------------------------------------------------------
+  // Build asset URL
+  // ----------------------------------------------------------
+
+  const assetURL = new URL(request.url);
+
+  assetURL.pathname = pathname;
+
+
+  // ----------------------------------------------------------
+  // Ask Cloudflare Assets for the exact file.
+  //
+  // We deliberately do NOT request the directory URL.
+  // ----------------------------------------------------------
+
+  const assetRequest = new Request(
+    assetURL.toString(),
+    {
+      method: "GET",
+      headers: request.headers
+    }
+  );
+
+
+  const response = await env.ASSETS.fetch(assetRequest);
+
+
+  // ----------------------------------------------------------
+  // If the asset does not exist, return a clean 404.
+  // ----------------------------------------------------------
+
+  if (response.status === 404) {
+    return new Response(
+      `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GrowPilot AI — Page Not Found</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 42px;
+    }
+
+    a {
+      color: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <h1>404</h1>
+  <p>The page you requested was not found.</p>
+  <p>
+    <a href="/">Return to GrowPilot AI</a>
+  </p>
+</body>
+</html>`,
+      {
+        status: 404,
+        headers: {
+          "Content-Type": "text/html; charset=UTF-8",
+          ...corsHeaders()
+        }
+      }
+    );
+  }
+
+
+  // ----------------------------------------------------------
+  // Return the asset.
+  // ----------------------------------------------------------
+
+  const headers = new Headers(response.headers);
+
+  headers.set(
+    "Cache-Control",
+    "no-cache, no-store, must-revalidate"
+  );
+
+  headers.set(
+    "Pragma",
+    "no-cache"
+  );
+
+  headers.set(
+    "Expires",
+    "0"
+  );
+
+  headers.set(
+    "X-GrowPilot-Version",
+    "v0.3.1"
+  );
+
+  return new Response(
+    response.body,
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    }
+  );
+}
+
+
+// ============================================================
+// AI GENERATION
+// ============================================================
+
 async function handleGenerate(request, env) {
   let input;
 
-  // Read JSON request
+
+  // ----------------------------------------------------------
+  // Parse JSON
+  // ----------------------------------------------------------
+
   try {
     input = await request.json();
   } catch {
@@ -76,6 +261,11 @@ async function handleGenerate(request, env) {
       400
     );
   }
+
+
+  // ----------------------------------------------------------
+  // Validate object
+  // ----------------------------------------------------------
 
   if (
     !input ||
@@ -92,7 +282,10 @@ async function handleGenerate(request, env) {
   }
 
 
+  // ----------------------------------------------------------
   // Validate required fields
+  // ----------------------------------------------------------
+
   for (const field of REQUIRED_FIELDS) {
     if (
       typeof input[field] !== "string" ||
@@ -109,7 +302,10 @@ async function handleGenerate(request, env) {
   }
 
 
-  // Clean and limit input
+  // ----------------------------------------------------------
+  // Clean input
+  // ----------------------------------------------------------
+
   const data = {
     business: clean(input.business),
     product: clean(input.product),
@@ -121,6 +317,10 @@ async function handleGenerate(request, env) {
     tone: clean(input.tone)
   };
 
+
+  // ----------------------------------------------------------
+  // AI prompt
+  // ----------------------------------------------------------
 
   const prompt = `
 Create a complete marketing pack for the following business.
@@ -161,8 +361,21 @@ The JSON must contain exactly these fields:
   "whatsapp_status": "string",
   "tiktok_hook": "string",
   "product_description": "string",
-  "content_ideas": ["string", "string", "string", "string", "string"],
-  "hashtags": ["string", "string", "string", "string", "string", "string"]
+  "content_ideas": [
+    "string",
+    "string",
+    "string",
+    "string",
+    "string"
+  ],
+  "hashtags": [
+    "string",
+    "string",
+    "string",
+    "string",
+    "string",
+    "string"
+  ]
 }
 
 Rules:
@@ -182,6 +395,10 @@ Rules:
 - Do not add explanations outside the JSON.
 `;
 
+
+  // ----------------------------------------------------------
+  // Run AI
+  // ----------------------------------------------------------
 
   try {
     const model =
@@ -207,15 +424,27 @@ Rules:
     );
 
 
+    // --------------------------------------------------------
+    // Extract AI text
+    // --------------------------------------------------------
+
     let raw = extractAIText(response);
 
-    // Remove accidental markdown code fences.
+
+    // --------------------------------------------------------
+    // Remove markdown fences if AI accidentally adds them
+    // --------------------------------------------------------
+
     raw = raw
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
 
+
+    // --------------------------------------------------------
+    // Parse JSON
+    // --------------------------------------------------------
 
     let result;
 
@@ -233,31 +462,50 @@ Rules:
     }
 
 
-    // Normalize the AI response.
+    // --------------------------------------------------------
+    // Normalize result
+    // --------------------------------------------------------
+
     const normalized = {
       headline: clean(result.headline),
+
       primary_ad: clean(result.primary_ad),
+
       cta: clean(result.cta),
-      whatsapp_message: clean(result.whatsapp_message),
-      whatsapp_status: clean(result.whatsapp_status),
-      tiktok_hook: clean(result.tiktok_hook),
-      product_description: clean(result.product_description),
 
-      content_ideas: Array.isArray(result.content_ideas)
-        ? result.content_ideas
-            .map(clean)
-            .filter(Boolean)
-            .slice(0, 5)
-        : [],
+      whatsapp_message:
+        clean(result.whatsapp_message),
 
-      hashtags: Array.isArray(result.hashtags)
-        ? result.hashtags
-            .map(clean)
-            .filter(Boolean)
-            .slice(0, 6)
-        : []
+      whatsapp_status:
+        clean(result.whatsapp_status),
+
+      tiktok_hook:
+        clean(result.tiktok_hook),
+
+      product_description:
+        clean(result.product_description),
+
+      content_ideas:
+        Array.isArray(result.content_ideas)
+          ? result.content_ideas
+              .map(clean)
+              .filter(Boolean)
+              .slice(0, 5)
+          : [],
+
+      hashtags:
+        Array.isArray(result.hashtags)
+          ? result.hashtags
+              .map(clean)
+              .filter(Boolean)
+              .slice(0, 6)
+          : []
     };
 
+
+    // --------------------------------------------------------
+    // Return successful result
+    // --------------------------------------------------------
 
     return json({
       success: true,
@@ -265,12 +513,16 @@ Rules:
     });
 
   } catch (error) {
-    console.error("GrowPilot AI error:", error);
+    console.error(
+      "GrowPilot AI generation error:",
+      error
+    );
 
     return json(
       {
         success: false,
-        error: "AI generation failed. Please try again."
+        error:
+          "AI generation failed. Please try again."
       },
       500
     );
@@ -278,9 +530,10 @@ Rules:
 }
 
 
-/*
- * Extract text from different Workers AI response shapes.
- */
+// ============================================================
+// AI RESPONSE EXTRACTION
+// ============================================================
+
 function extractAIText(response) {
   if (typeof response === "string") {
     return response;
@@ -313,11 +566,15 @@ function extractAIText(response) {
 }
 
 
-/*
- * Clean user/AI text.
- */
+// ============================================================
+// TEXT CLEANER
+// ============================================================
+
 function clean(value) {
-  if (value === undefined || value === null) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return "";
   }
 
@@ -327,16 +584,20 @@ function clean(value) {
 }
 
 
-/*
- * JSON response helper.
- */
+// ============================================================
+// JSON RESPONSE
+// ============================================================
+
 function json(data, status = 200) {
   return new Response(
     JSON.stringify(data),
     {
       status,
+
       headers: {
-        "Content-Type": "application/json; charset=UTF-8",
+        "Content-Type":
+          "application/json; charset=UTF-8",
+
         ...corsHeaders()
       }
     }
@@ -344,13 +605,18 @@ function json(data, status = 200) {
 }
 
 
-/*
- * CORS headers.
- */
+// ============================================================
+// CORS
+// ============================================================
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+
+    "Access-Control-Allow-Methods":
+      "GET, POST, OPTIONS",
+
+    "Access-Control-Allow-Headers":
+      "Content-Type"
   };
 }
