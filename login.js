@@ -1,1 +1,0 @@
-document.getElementById('loginForm').addEventListener('submit',async e=>{e.preventDefault();const s=document.getElementById('loginStatus');s.textContent='Supabase SDK connection will be enabled after credentials are configured.';});
