@@ -1,107 +1,85 @@
-// GrowPilot AI — v0.3
+// GrowPilot AI v0.3
 // Marketing Pack Generator
 
-const form = document.getElementById("createForm");
-const statusEl = document.getElementById("status");
+(() => {
+  const form =
+    document.getElementById("createForm") ||
+    document.getElementById("adForm");
 
-const API_BASE_URL =
-  window.GROWPILOT_CONFIG?.API_BASE_URL ||
-  window.location.origin;
+  const status = document.getElementById("status");
+  const button = document.getElementById("generate");
 
-function setStatus(message, error = false) {
-  if (!statusEl) return;
-
-  statusEl.textContent = message;
-  statusEl.style.color = error ? "#ff7b7b" : "#6ee7b7";
-}
-
-function getValue(id) {
-  const element = document.getElementById(id);
-  return element ? element.value.trim() : "";
-}
-
-function setButtonLoading(button, loading) {
-  if (!button) return;
-
-  if (loading) {
-    button.disabled = true;
-    button.dataset.originalText = button.textContent;
-    button.textContent = "Generating...";
-  } else {
-    button.disabled = false;
-    button.textContent =
-      button.dataset.originalText || "Generate";
+  if (!form) {
+    console.error("GrowPilot AI: create form not found.");
+    return;
   }
-}
 
-function saveResult(data, input) {
-  const pack = {
-    id: Date.now().toString(),
-    createdAt: new Date().toISOString(),
-    input,
-    result: data
-  };
+  function getValue(id) {
+    const element = document.getElementById(id);
+    return element ? element.value.trim() : "";
+  }
 
-  localStorage.setItem(
-    "growpilot_latest_pack",
-    JSON.stringify(pack)
-  );
+  function setStatus(message, type = "") {
+    if (!status) return;
 
-  return pack;
-}
+    status.textContent = message;
+    status.className = "status";
 
-if (form) {
+    if (type) {
+      status.classList.add(type);
+    }
+  }
+
+  function setLoading(loading) {
+    if (!button) return;
+
+    button.disabled = loading;
+    button.textContent = loading
+      ? "Generating..."
+      : "Generate Marketing Pack →";
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const button = form.querySelector("button[type='submit']");
+    const config = window.GROWPILOT_CONFIG || {};
+
+    const apiBase =
+      String(config.API_BASE_URL || "").replace(/\/+$/, "");
+
+    if (!apiBase) {
+      setStatus(
+        "API is not configured. Please check Js/config.js.",
+        "error"
+      );
+      return;
+    }
 
     const input = {
       business: getValue("business"),
       product: getValue("product"),
       audience: getValue("audience"),
+      location: getValue("location"),
+      price: getValue("price"),
       platform: getValue("platform"),
       goal: getValue("goal"),
-      tone: getValue("tone"),
-      location: getValue("location"),
-      price: getValue("price")
+      tone: getValue("tone")
     };
 
-    // ----------------------------------------
-    // Validate required fields
-    // ----------------------------------------
-
-    const required = [
-      "business",
-      "product",
-      "audience",
-      "platform",
-      "goal",
-      "tone"
-    ];
-
-    const missing = required.find(
-      (field) => !input[field]
-    );
-
-    if (missing) {
+    if (!input.business || !input.product || !input.audience) {
       setStatus(
-        `Please complete the ${missing} field.`,
-        true
+        "Please complete the required business, product, and audience fields.",
+        "error"
       );
       return;
     }
 
-    // ----------------------------------------
-    // Start generation
-    // ----------------------------------------
-
-    setButtonLoading(button, true);
-    setStatus("GrowPilot AI is creating your marketing pack...");
+    setLoading(true);
+    setStatus("Creating your AI marketing pack...");
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/generate`,
+        `${apiBase}/api/generate`,
         {
           method: "POST",
           headers: {
@@ -111,89 +89,84 @@ if (form) {
         }
       );
 
-      let payload;
+      let body;
 
       try {
-        payload = await response.json();
+        body = await response.json();
       } catch {
         throw new Error(
-          "The server returned an invalid response."
+          `The server returned an invalid response (${response.status}).`
         );
       }
 
       if (!response.ok) {
         throw new Error(
-          payload?.error ||
+          body?.error ||
           `Generation failed (${response.status}).`
         );
       }
 
-      if (!payload?.success || !payload?.data) {
+      if (!body || body.success !== true || !body.data) {
         throw new Error(
-          payload?.error ||
-          "The AI did not return a valid marketing pack."
+          body?.error ||
+          "The AI returned an unexpected response."
         );
       }
 
-      // --------------------------------------
-      // Save generated pack
-      // --------------------------------------
+      const pack = {
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        input: input,
+        result: body.data
+      };
 
-      const pack = saveResult(
-        payload.data,
-        input
+      // Store the newest generated pack.
+      localStorage.setItem(
+        "growpilot_latest_pack",
+        JSON.stringify(pack)
       );
 
-      // --------------------------------------
-      // Also keep a history of generated packs
-      // --------------------------------------
-
-      const historyKey =
-        "growpilot_saved_packs";
-
-      let history = [];
+      // Keep a local history of generated packs.
+      let savedPacks = [];
 
       try {
-        history =
-          JSON.parse(
-            localStorage.getItem(historyKey)
-          ) || [];
+        savedPacks = JSON.parse(
+          localStorage.getItem("growpilot_saved_packs") || "[]"
+        );
+
+        if (!Array.isArray(savedPacks)) {
+          savedPacks = [];
+        }
       } catch {
-        history = [];
+        savedPacks = [];
       }
 
-      history.unshift(pack);
+      // Add the newest pack to the beginning.
+      savedPacks.unshift(pack);
 
-      // Keep the most recent 20 packs locally
-      history = history.slice(0, 20);
+      // Prevent unlimited localStorage growth.
+      savedPacks = savedPacks.slice(0, 50);
 
       localStorage.setItem(
-        historyKey,
-        JSON.stringify(history)
+        "growpilot_saved_packs",
+        JSON.stringify(savedPacks)
       );
 
-      setStatus("Marketing pack created successfully!");
+      setStatus("Marketing pack created successfully.");
 
-      // --------------------------------------
-      // Go to results
-      // --------------------------------------
-
-      window.location.href =
-        "/HTML/results.html";
+      // Open the results page.
+      window.location.href = "/HTML/results.html";
 
     } catch (error) {
-      console.error(
-        "GrowPilot generation error:",
-        error
-      );
+      console.error("GrowPilot AI generation error:", error);
 
       setStatus(
         error?.message ||
-        "Something went wrong. Please try again.",
-        true
+        "Something went wrong while generating your marketing pack.",
+        "error"
       );
 
-      setButtonLoading(button, false);
+      setLoading(false);
     }
   });
-}
+})();
