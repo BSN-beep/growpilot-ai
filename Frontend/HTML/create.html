@@ -1,1 +1,187 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Create — GrowPilot AI</title><link rel="stylesheet" href="/CSS/style.css"></head><body><header class="nav"><a class="brand" href="index.html">GrowPilot<span>AI</span></a><nav><a href="saved.html">Saved</a><a href="pricing.html">Pricing</a></nav></header><main class="container"><div class="page-head"><div class="badge">AI GENERATOR</div><h1>Create a marketing pack</h1><p>Describe your business and our secure backend will ask the AI to create platform-ready content.</p></div><form id="adForm" class="form"><label>Business name<input id="business" required placeholder="Bright Sneakers"></label><label>What do you sell?<input id="product" required placeholder="Men's sneakers"></label><label>Target customer<input id="audience" required placeholder="Young adults in Nigeria"></label><label>Location<input id="location" placeholder="Ibadan"></label><label>Price<input id="price" placeholder="₦35,000"></label><label>Platform<select id="platform"><option>Instagram</option><option>Facebook</option><option>TikTok</option><option>WhatsApp</option><option>X</option><option>Google</option></select></label><label>Marketing goal<select id="goal"><option>Get sales</option><option>Get WhatsApp messages</option><option>Get website visits</option><option>Get followers</option></select></label><label>Tone<select id="tone"><option>Bold</option><option>Professional</option><option>Friendly</option><option>Luxury</option><option>Funny</option><option>Urgent</option></select></label><button class="btn primary" type="submit" id="generate">Generate with AI →</button><div id="status" class="status"></div></form></main><script src="/Js/config.js"></script><script src="/Js/create.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Create Marketing Pack — GrowPilot AI</title>
+
+  <link rel="stylesheet" href="/CSS/style.css">
+</head>
+
+<body>
+
+  <header class="nav">
+    <a class="brand" href="/HTML/index.html">
+      GrowPilot<span>AI</span>
+    </a>
+
+    <nav>
+      <a href="/HTML/create.html">Create</a>
+      <a href="/HTML/saved.html">Saved</a>
+      <a href="/HTML/pricing.html">Pricing</a>
+      <a href="/HTML/login.html">Login</a>
+    </nav>
+  </header>
+
+
+  <main class="container">
+
+    <section class="page-header">
+      <div class="badge">AI MARKETING GENERATOR</div>
+
+      <h1>Create your <span>Marketing Pack</span></h1>
+
+      <p>
+        Tell GrowPilot AI about your business and generate
+        ready-to-use marketing content.
+      </p>
+    </section>
+
+
+    <form id="createForm" class="form-card">
+
+      <div class="form-group">
+        <label for="business">Business Name</label>
+
+        <input
+          id="business"
+          name="business"
+          type="text"
+          placeholder="e.g. Sarah's Fashion Store"
+          maxlength="200"
+          required
+        >
+      </div>
+
+
+      <div class="form-group">
+        <label for="product">Product or Service</label>
+
+        <input
+          id="product"
+          name="product"
+          type="text"
+          placeholder="e.g. Women's sneakers"
+          maxlength="200"
+          required
+        >
+      </div>
+
+
+      <div class="form-group">
+        <label for="audience">Target Audience</label>
+
+        <input
+          id="audience"
+          name="audience"
+          type="text"
+          placeholder="e.g. Young adults aged 18–30"
+          maxlength="200"
+          required
+        >
+      </div>
+
+
+      <div class="form-group">
+        <label for="location">Location</label>
+
+        <input
+          id="location"
+          name="location"
+          type="text"
+          placeholder="e.g. Lagos, Nigeria"
+          maxlength="200"
+        >
+      </div>
+
+
+      <div class="form-group">
+        <label for="price">Price</label>
+
+        <input
+          id="price"
+          name="price"
+          type="text"
+          placeholder="e.g. ₦25,000"
+          maxlength="100"
+        >
+      </div>
+
+
+      <div class="form-group">
+        <label for="platform">Main Platform</label>
+
+        <select id="platform" name="platform" required>
+          <option value="">Select a platform</option>
+          <option value="WhatsApp">WhatsApp</option>
+          <option value="TikTok">TikTok</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Facebook">Facebook</option>
+          <option value="X">X</option>
+          <option value="YouTube">YouTube</option>
+          <option value="Multiple platforms">Multiple platforms</option>
+        </select>
+      </div>
+
+
+      <div class="form-group">
+        <label for="goal">Marketing Goal</label>
+
+        <select id="goal" name="goal" required>
+          <option value="">Select a goal</option>
+          <option value="Get more sales">Get more sales</option>
+          <option value="Get more customers">Get more customers</option>
+          <option value="Increase awareness">Increase awareness</option>
+          <option value="Promote a product">Promote a product</option>
+          <option value="Generate leads">Generate leads</option>
+          <option value="Grow social media">Grow social media</option>
+        </select>
+      </div>
+
+
+      <div class="form-group">
+        <label for="tone">Marketing Tone</label>
+
+        <select id="tone" name="tone" required>
+          <option value="">Select a tone</option>
+          <option value="Professional">Professional</option>
+          <option value="Friendly">Friendly</option>
+          <option value="Persuasive">Persuasive</option>
+          <option value="Bold">Bold</option>
+          <option value="Luxury">Luxury</option>
+          <option value="Casual">Casual</option>
+          <option value="Energetic">Energetic</option>
+        </select>
+      </div>
+
+
+      <div id="status" class="status" aria-live="polite"></div>
+
+
+      <button
+        id="generate"
+        type="submit"
+        class="btn primary"
+      >
+        Generate Marketing Pack →
+      </button>
+
+    </form>
+
+  </main>
+
+
+  <footer class="footer">
+    <p>GrowPilot AI · v0.3</p>
+  </footer>
+
+
+  <!-- Public browser configuration -->
+  <script src="/Js/config.js"></script>
+
+  <!-- Marketing generation logic -->
+  <script src="/Js/create.js"></script>
+
+</body>
+</html>
