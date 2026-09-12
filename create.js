@@ -1,5 +1,0 @@
-const form=document.getElementById('adForm'),status=document.getElementById('status'),button=document.getElementById('generate');
-form.addEventListener('submit',async e=>{e.preventDefault();const data={business:v('business'),product:v('product'),audience:v('audience'),location:v('location'),price:v('price'),platform:v('platform'),goal:v('goal'),tone:v('tone')};
-button.disabled=true;status.textContent='Generating your AI marketing pack…';
-try{const base=window.GROWPILOT_CONFIG.API_BASE_URL;if(!base||base.includes('YOUR-WORKER'))throw new Error('Backend URL is not configured yet.');const r=await fetch(base+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Generation failed');localStorage.setItem('growpilot_current',JSON.stringify({input:data,output:out}));location.href='results.html'}catch(err){status.textContent=err.message;button.disabled=false}});
-function v(id){return document.getElementById(id).value.trim()}
