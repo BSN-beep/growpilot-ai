@@ -11,4 +11,4 @@ AI_MODEL = "@cf/zai-org/glm-4.7-flash"
 [assets]
 directory = "./Frontend"
 binding = "ASSETS"
-run_worker_first = ["/api/*"]
+run_worker_first = ["/", "/api/*", "/HTML/*", "/CSS/*", "/Js/*"]

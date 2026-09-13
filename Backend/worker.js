@@ -1,357 +1,148 @@
-// GrowPilot AI v0.3.1
-// Cloudflare Worker + Workers AI
-//
-// IMPORTANT:
-// This version explicitly handles frontend routes so Cloudflare
-// does not redirect /HTML/index.html to /HTML/.
+// GrowPilot AI — v0.3
+// Cloudflare Worker + Workers AI + Static Frontend
 
-// ============================================================
-// CONFIG
-// ============================================================
-
-const REQUIRED_FIELDS = [
-  "business",
-  "product",
-  "audience",
-  "platform",
-  "goal",
-  "tone"
-];
-
-const MAX_FIELD_LENGTH = 2000;
-
-
-// ============================================================
-// WORKER
-// ============================================================
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "POST,OPTIONS"
+};
 
 export default {
   async fetch(request, env) {
+
     const url = new URL(request.url);
+    const pathname = url.pathname;
 
-    // --------------------------------------------------------
     // CORS preflight
-    // --------------------------------------------------------
-
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders()
+      return new Response("", {
+        headers: cors
       });
     }
 
+    /*
+     * ==========================================
+     * FRONTEND ASSETS
+     * ==========================================
+     */
 
-    // --------------------------------------------------------
-    // AI API
-    // --------------------------------------------------------
-
-    if (
-      url.pathname === "/api/generate" &&
-      request.method === "POST"
-    ) {
-      return handleGenerate(request, env);
-    }
-
-
-    // --------------------------------------------------------
-    // FRONTEND
-    // --------------------------------------------------------
-
-    if (request.method === "GET") {
-      return handleFrontend(request, env);
-    }
-
-
-    // --------------------------------------------------------
-    // Unsupported method
-    // --------------------------------------------------------
-
-    return json(
-      {
-        success: false,
-        error: "Method not allowed."
-      },
-      405
-    );
-  }
-};
-
-
-// ============================================================
-// FRONTEND ROUTING
-// ============================================================
-
-async function handleFrontend(request, env) {
-  const url = new URL(request.url);
-
-  let pathname = url.pathname;
-
-
-  // ----------------------------------------------------------
-  // Root
-  // ----------------------------------------------------------
-
-  if (pathname === "/") {
-    pathname = "/HTML/index.html";
-  }
-
-
-  // ----------------------------------------------------------
-  // Prevent directory-style redirect
-  //
-  // /HTML/ should always become the actual index file.
-  // ----------------------------------------------------------
-
-  if (pathname === "/HTML/" || pathname === "/HTML") {
-    pathname = "/HTML/index.html";
-  }
-
-
-  // ----------------------------------------------------------
-  // Prevent CSS case mistakes
-  // ----------------------------------------------------------
-
-  if (pathname.startsWith("/css/")) {
-    pathname =
-      "/CSS/" + pathname.slice("/css/".length);
-  }
-
-
-  // ----------------------------------------------------------
-  // Prevent JavaScript case mistakes
-  // ----------------------------------------------------------
-
-  if (pathname.startsWith("/js/")) {
-    pathname =
-      "/Js/" + pathname.slice("/js/".length);
-  }
-
-
-  // ----------------------------------------------------------
-  // Build asset URL
-  // ----------------------------------------------------------
-
-  const assetURL = new URL(request.url);
-
-  assetURL.pathname = pathname;
-
-
-  // ----------------------------------------------------------
-  // Ask Cloudflare Assets for the exact file.
-  //
-  // We deliberately do NOT request the directory URL.
-  // ----------------------------------------------------------
-
-  const assetRequest = new Request(
-    assetURL.toString(),
-    {
-      method: "GET",
-      headers: request.headers
-    }
-  );
-
-
-  const response = await env.ASSETS.fetch(assetRequest);
-
-
-  // ----------------------------------------------------------
-  // If the asset does not exist, return a clean 404.
-  // ----------------------------------------------------------
-
-  if (response.status === 404) {
-    return new Response(
-      `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>GrowPilot AI — Page Not Found</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      padding: 40px 20px;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 42px;
-    }
-
-    a {
-      color: #2563eb;
-    }
-  </style>
-</head>
-<body>
-  <h1>404</h1>
-  <p>The page you requested was not found.</p>
-  <p>
-    <a href="/">Return to GrowPilot AI</a>
-  </p>
-</body>
-</html>`,
-      {
-        status: 404,
-        headers: {
-          "Content-Type": "text/html; charset=UTF-8",
-          ...corsHeaders()
-        }
+    // Root path → index.html
+    if (pathname === "/" && request.method === "GET") {
+      try {
+        return await env.ASSETS.fetch(
+          new Request(
+            new URL("/HTML/index.html", "https://assets"),
+            request
+          )
+        );
+      } catch (error) {
+        console.error("Root asset error:", error);
+        return new Response("Not found", { status: 404 });
       }
-    );
-  }
-
-
-  // ----------------------------------------------------------
-  // Return the asset.
-  // ----------------------------------------------------------
-
-  const headers = new Headers(response.headers);
-
-  headers.set(
-    "Cache-Control",
-    "no-cache, no-store, must-revalidate"
-  );
-
-  headers.set(
-    "Pragma",
-    "no-cache"
-  );
-
-  headers.set(
-    "Expires",
-    "0"
-  );
-
-  headers.set(
-    "X-GrowPilot-Version",
-    "v0.3.1"
-  );
-
-  return new Response(
-    response.body,
-    {
-      status: response.status,
-      statusText: response.statusText,
-      headers
     }
-  );
-}
 
-
-// ============================================================
-// AI GENERATION
-// ============================================================
-
-async function handleGenerate(request, env) {
-  let input;
-
-
-  // ----------------------------------------------------------
-  // Parse JSON
-  // ----------------------------------------------------------
-
-  try {
-    input = await request.json();
-  } catch {
-    return json(
-      {
-        success: false,
-        error: "Request body must contain valid JSON."
-      },
-      400
-    );
-  }
-
-
-  // ----------------------------------------------------------
-  // Validate object
-  // ----------------------------------------------------------
-
-  if (
-    !input ||
-    typeof input !== "object" ||
-    Array.isArray(input)
-  ) {
-    return json(
-      {
-        success: false,
-        error: "Invalid request data."
-      },
-      400
-    );
-  }
-
-
-  // ----------------------------------------------------------
-  // Validate required fields
-  // ----------------------------------------------------------
-
-  for (const field of REQUIRED_FIELDS) {
-    if (
-      typeof input[field] !== "string" ||
-      !input[field].trim()
-    ) {
-      return json(
-        {
-          success: false,
-          error: `Missing required field: ${field}`
-        },
-        400
-      );
+    // HTML files
+    if (request.method === "GET" && pathname.endsWith(".html")) {
+      try {
+        return await env.ASSETS.fetch(
+          new Request(
+            new URL(pathname, "https://assets"),
+            request
+          )
+        );
+      } catch (error) {
+        console.error(`HTML asset error for ${pathname}:`, error);
+        return new Response("Not found", { status: 404 });
+      }
     }
-  }
 
+    // CSS files
+    if (request.method === "GET" && (pathname.startsWith("/CSS/") || pathname.startsWith("/css/"))) {
+      const normalizedPath = pathname.startsWith("/css/")
+        ? "/CSS/" + pathname.slice(5)
+        : pathname;
 
-  // ----------------------------------------------------------
-  // Clean input
-  // ----------------------------------------------------------
+      try {
+        const response = await env.ASSETS.fetch(
+          new Request(
+            new URL(normalizedPath, "https://assets"),
+            request
+          )
+        );
 
-  const data = {
-    business: clean(input.business),
-    product: clean(input.product),
-    audience: clean(input.audience),
-    location: clean(input.location),
-    price: clean(input.price),
-    platform: clean(input.platform),
-    goal: clean(input.goal),
-    tone: clean(input.tone)
-  };
+        const headers = new Headers(response.headers);
+        headers.set("Content-Type", "text/css; charset=utf-8");
 
+        return new Response(response.body, {
+          status: response.status,
+          headers: headers
+        });
+      } catch (error) {
+        console.error(`CSS asset error for ${normalizedPath}:`, error);
+        return new Response("Not found", { status: 404 });
+      }
+    }
 
-  // ----------------------------------------------------------
-  // AI prompt
-  // ----------------------------------------------------------
+    // JavaScript files
+    if (request.method === "GET" && (pathname.startsWith("/Js/") || pathname.startsWith("/js/"))) {
+      const normalizedPath = pathname.startsWith("/js/")
+        ? "/Js/" + pathname.slice(4)
+        : pathname;
 
-  const prompt = `
-Create a complete marketing pack for the following business.
+      try {
+        const response = await env.ASSETS.fetch(
+          new Request(
+            new URL(normalizedPath, "https://assets"),
+            request
+          )
+        );
 
-Business:
-${data.business}
+        const headers = new Headers(response.headers);
+        headers.set("Content-Type", "application/javascript; charset=utf-8");
 
-Product or Service:
-${data.product}
+        return new Response(response.body, {
+          status: response.status,
+          headers: headers
+        });
+      } catch (error) {
+        console.error(`JS asset error for ${normalizedPath}:`, error);
+        return new Response("Not found", { status: 404 });
+      }
+    }
 
-Target Audience:
-${data.audience}
+    /*
+     * ==========================================
+     * AI API
+     * ==========================================
+     */
 
-Location:
-${data.location || "Not specified"}
+    if (pathname === "/api/generate" && request.method === "POST") {
+      try {
 
-Price:
-${data.price || "Not specified"}
+        const d = await request.json();
 
-Main Platform:
-${data.platform}
+        const required = ["business", "product", "audience", "platform", "goal", "tone"];
 
-Marketing Goal:
-${data.goal}
+        for (const key of required) {
+          if (!d[key] || String(d[key]).trim() === "") {
+            return json({ error: `Missing required field: ${key}` }, 400);
+          }
+        }
 
-Marketing Tone:
-${data.tone}
+        const prompt = `You are GrowPilot AI, an expert Nigerian small-business marketing assistant.
 
-Return ONLY valid JSON.
+Create a useful marketing pack for this business.
 
-The JSON must contain exactly these fields:
+Business: ${d.business}
+Product or service: ${d.product}
+Target customer: ${d.audience}
+Location: ${d.location || "Nigeria"}
+Price: ${d.price || "not provided"}
+Platform: ${d.platform}
+Marketing goal: ${d.goal}
+Tone: ${d.tone}
+
+Return ONLY valid JSON with exactly these keys:
 
 {
   "headline": "string",
@@ -361,262 +152,70 @@ The JSON must contain exactly these fields:
   "whatsapp_status": "string",
   "tiktok_hook": "string",
   "product_description": "string",
-  "content_ideas": [
-    "string",
-    "string",
-    "string",
-    "string",
-    "string"
-  ],
-  "hashtags": [
-    "string",
-    "string",
-    "string",
-    "string",
-    "string",
-    "string"
-  ]
+  "content_ideas": ["string", "string", "string", "string", "string"],
+  "hashtags": ["string", "string", "string", "string", "string", "string"]
 }
 
-Rules:
+Keep claims realistic. Do not invent testimonials, certifications, guarantees, discounts, statistics, or facts not provided.
 
-- Make the content persuasive but natural.
-- Make the headline attention-grabbing.
-- Make the primary ad ready to publish.
-- Make the CTA action-oriented.
-- Make the WhatsApp message conversational.
-- Make the WhatsApp status short and engaging.
-- Make the TikTok hook suitable for the first few seconds of a video.
-- Make the product description useful for customers.
-- Provide exactly 5 content ideas.
-- Provide exactly 6 relevant hashtags.
-- Do not use markdown.
-- Do not wrap the JSON in code fences.
-- Do not add explanations outside the JSON.
-`;
+Make the content practical and specific to a Nigerian small business.`;
 
-
-  // ----------------------------------------------------------
-  // Run AI
-  // ----------------------------------------------------------
-
-  try {
-    const model =
-      env.AI_MODEL ||
-      "@cf/zai-org/glm-4.7-flash";
-
-
-    const response = await env.AI.run(
-      model,
-      {
-        messages: [
+        const result = await env.AI.run(
+          env.AI_MODEL || "@cf/zai-org/glm-4.7-flash",
           {
-            role: "system",
-            content:
-              "You are GrowPilot AI, an expert marketing assistant. Return only valid JSON when JSON is requested."
-          },
-          {
-            role: "user",
-            content: prompt
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.8
           }
-        ]
+        );
+
+        let text = result?.response;
+
+        if (!text) {
+          return json({ error: "AI returned an empty response" }, 502);
+        }
+
+        text = text
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/\s*```$/i, "")
+          .trim();
+
+        let output;
+
+        try {
+          output = JSON.parse(text);
+        } catch (parseError) {
+          return json({ error: "AI did not return valid JSON" }, 502);
+        }
+
+        if (!output.headline || !output.primary_ad || !output.cta) {
+          return json({ error: "AI response missing required fields" }, 502);
+        }
+
+        return json({ success: true, data: output }, 200);
+
+      } catch (error) {
+        console.error("API error:", error);
+        return json({ error: error?.message || "Server error" }, 500);
       }
-    );
-
-
-    // --------------------------------------------------------
-    // Extract AI text
-    // --------------------------------------------------------
-
-    let raw = extractAIText(response);
-
-
-    // --------------------------------------------------------
-    // Remove markdown fences if AI accidentally adds them
-    // --------------------------------------------------------
-
-    raw = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-
-    // --------------------------------------------------------
-    // Parse JSON
-    // --------------------------------------------------------
-
-    let result;
-
-    try {
-      result = JSON.parse(raw);
-    } catch {
-      return json(
-        {
-          success: false,
-          error: "The AI returned invalid JSON.",
-          details: raw.slice(0, 1000)
-        },
-        502
-      );
     }
 
+    /*
+     * ==========================================
+     * FALLBACK
+     * ==========================================
+     */
 
-    // --------------------------------------------------------
-    // Normalize result
-    // --------------------------------------------------------
-
-    const normalized = {
-      headline: clean(result.headline),
-
-      primary_ad: clean(result.primary_ad),
-
-      cta: clean(result.cta),
-
-      whatsapp_message:
-        clean(result.whatsapp_message),
-
-      whatsapp_status:
-        clean(result.whatsapp_status),
-
-      tiktok_hook:
-        clean(result.tiktok_hook),
-
-      product_description:
-        clean(result.product_description),
-
-      content_ideas:
-        Array.isArray(result.content_ideas)
-          ? result.content_ideas
-              .map(clean)
-              .filter(Boolean)
-              .slice(0, 5)
-          : [],
-
-      hashtags:
-        Array.isArray(result.hashtags)
-          ? result.hashtags
-              .map(clean)
-              .filter(Boolean)
-              .slice(0, 6)
-          : []
-    };
-
-
-    // --------------------------------------------------------
-    // Return successful result
-    // --------------------------------------------------------
-
-    return json({
-      success: true,
-      data: normalized
-    });
-
-  } catch (error) {
-    console.error(
-      "GrowPilot AI generation error:",
-      error
-    );
-
-    return json(
-      {
-        success: false,
-        error:
-          "AI generation failed. Please try again."
-      },
-      500
-    );
+    return json({ error: "Not found" }, 404);
   }
-}
-
-
-// ============================================================
-// AI RESPONSE EXTRACTION
-// ============================================================
-
-function extractAIText(response) {
-  if (typeof response === "string") {
-    return response;
-  }
-
-  if (!response) {
-    return "";
-  }
-
-  if (typeof response.response === "string") {
-    return response.response;
-  }
-
-  if (typeof response.result === "string") {
-    return response.result;
-  }
-
-  if (
-    response.result &&
-    typeof response.result.response === "string"
-  ) {
-    return response.result.response;
-  }
-
-  if (typeof response.text === "string") {
-    return response.text;
-  }
-
-  return JSON.stringify(response);
-}
-
-
-// ============================================================
-// TEXT CLEANER
-// ============================================================
-
-function clean(value) {
-  if (
-    value === undefined ||
-    value === null
-  ) {
-    return "";
-  }
-
-  return String(value)
-    .trim()
-    .slice(0, MAX_FIELD_LENGTH);
-}
-
-
-// ============================================================
-// JSON RESPONSE
-// ============================================================
+};
 
 function json(data, status = 200) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-
-      headers: {
-        "Content-Type":
-          "application/json; charset=UTF-8",
-
-        ...corsHeaders()
-      }
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...cors,
+      "Content-Type": "application/json; charset=utf-8"
     }
-  );
-}
-
-
-// ============================================================
-// CORS
-// ============================================================
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-
-    "Access-Control-Allow-Methods":
-      "GET, POST, OPTIONS",
-
-    "Access-Control-Allow-Headers":
-      "Content-Type"
-  };
+  });
 }

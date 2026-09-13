@@ -1,1 +1,57 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — GrowPilot AI</title><link rel="stylesheet" href="/CSS/style.css"></head><body><header class="nav"><a class="brand" href="index.html">GrowPilot<span>AI</span></a><nav><a href="create.html">Create</a><a href="pricing.html">Pricing</a></nav></header><main class="container"><div class="page-head"><div class="badge">LOGIN</div><h1>Sign in to GrowPilot</h1><p>Access your saved marketing packs and history.</p></div><form id="loginForm" class="form"><label>Email<input type="email" id="loginEmail" required placeholder="you@example.com"></label><label>Password<input type="password" id="loginPassword" required placeholder="••••••••"></label><button class="btn primary" type="submit">Sign In →</button><div id="loginStatus" class="status"></div></form></main><script src="/Js/config.js"></script><script src="/Js/login.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login — GrowPilot AI</title>
+  <link rel="stylesheet" href="/CSS/style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/HTML/index.html">
+      GrowPilot<span>AI</span>
+    </a>
+    <nav>
+      <a href="/HTML/create.html">Create</a>
+      <a href="/HTML/saved.html">Saved</a>
+      <a href="/HTML/pricing.html">Pricing</a>
+      <a href="/HTML/login.html">Login</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="page-header">
+      <div class="badge">AUTHENTICATION</div>
+      <h1>Sign In to <span>GrowPilot</span></h1>
+      <p>Create an account or sign in to save your marketing packs across devices and unlock premium features.</p>
+    </section>
+
+    <form id="loginForm" class="form-card">
+      <div class="form-group">
+        <label for="loginEmail">Email Address</label>
+        <input id="loginEmail" name="email" type="email" placeholder="you@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="password" type="password" placeholder="••••••••" required>
+      </div>
+
+      <div id="loginStatus" class="status" aria-live="polite"></div>
+
+      <button type="submit" class="btn primary">Sign In →</button>
+
+      <p style="margin-top: 18px; text-align: center; color: #8993a8; font-size: 13px;">
+        Don't have an account? Create one to sync your packs.
+      </p>
+    </form>
+  </main>
+
+  <footer class="footer">
+    <p>GrowPilot AI · v0.3</p>
+  </footer>
+
+  <script src="/Js/config.js"></script>
+  <script src="/Js/login.js"></script>
+</body>
+</html>
